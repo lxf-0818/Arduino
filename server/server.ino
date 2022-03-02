@@ -2,8 +2,11 @@
  * Create a TCP Server on ESP8266 NodeMCU. 
  * TCP Socket Server Send Receive
 */
+#include <Wire.h>
 #include <ESP8266WiFi.h>
 int port = 8888;  //Port number
+const char* host = "10.0.0.208";
+
 WiFiServer server(port);
 //Server connect to WiFi Network
 const char *ssid = "NETGEAR37-2";  //Enter your wifi SSID
@@ -11,12 +14,35 @@ const char *password = "grandcurtain880";  //Enter your wifi Password
 int Index=0;
 char Buffer[40];
 #include "DHT.h"
-#define DHTPIN 5
+#define DHTPIN 14
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE); // Initialize DHT sensor
+int connect2Raspberry(char *msg);
 
-void setup() 
-{
+int connect2Raspberry(char*msg) {
+  
+    WiFiClient client;
+    if (!client.connect(host, 1233)) {
+      Serial.println("connection failed");
+      delay(5000);
+      return 0 ;
+    }
+    
+   // Serial.println("sending data to server");
+   // This will send a string to the server
+   if (client.connected()) {
+     client.printf("ESP8266: %s",msg);
+   }
+   String line = client.readStringUntil('\n');
+   Serial.println(line);
+
+   Serial.println("closing connection");
+   client.stop();
+   return 0;
+    
+}
+
+void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password); //Connect to wifi
@@ -35,7 +61,6 @@ void setup()
   Serial.println("");
   Serial.print("Connected to ");
   Serial.println(ssid);
-
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());  
   server.begin();
@@ -52,7 +77,8 @@ void loop() {
   WiFiClient client = server.available();
   if (client) {
     if(client.connected())  
-      Serial.println("Client Connected");
+      Serial.print(client.remoteIP());
+      Serial.println("  Client Connected to Server");
       
     while(client.connected()){      
       while(client.available()>0){
@@ -65,24 +91,22 @@ void loop() {
         float h = dht.readHumidity(); 
         float t = dht.readTemperature(); 
         char str[80];
+       
         sprintf(str, "%f,%f", t*9.0 / 5.0 + 32.0,h);
-        client.write(str);  
+        
+        Serial.println(str);
+        client.print(str);  
       } 
       else  if (strstr(Buffer,"TST")){
         bzero(Buffer,40);
-        for (int i =0 ; i<1 ;i++) {
-          digitalWrite(LED_BUILTIN, LOW);   // Turn the LED on (negative logic) 
-          delay(1000);                      // Wait for a second
-          digitalWrite(LED_BUILTIN, HIGH);  // Turn the LED off by making the voltage HIGH
-          delay(2000);                      // Wait for two seconds (to demonstrate the active low LED) 
-        }
-       char str[80];
-       client.write(str); 
+        int x = connect2Raspberry("tst");
+        char str[80];
+        client.write(str); 
       }
        
     }
     client.stop();
     Index =0;
-    Serial.println("Client disconnected");    
+    Serial.println("Client disconnected from Server");    
   }
 }
