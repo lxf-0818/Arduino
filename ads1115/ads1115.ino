@@ -1,5 +1,7 @@
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
+// Using default gain 
+//ads.setGain(GAIN_TWOTHIRDS);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
 
 Adafruit_ADS1X15 ads;
 float Voltage = 0.0;
