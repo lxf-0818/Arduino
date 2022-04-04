@@ -6,7 +6,10 @@
 */
 #define _HOME
 //#define CELL
-//#include <Wire.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27,20,4);
+
 #include <ESP8266WiFi.h>
 int port = 8888;  
 const char* host = "10.0.0.208";
@@ -24,6 +27,7 @@ const char *password = "4458e951";
 #endif  
 int Index=0;
 char Buffer[40];
+byte LCD_CONFIG;
 //IPAddress local_IP(10,0,0,109);
 //IPAddress gateway(10,0,0,1);
 //IPAddress subnet(255,255,255,0);
@@ -47,7 +51,7 @@ int connect2Raspberry(char*msg) {
    // Serial.println("sending data to server");
    // This will send a string to the server
    if (client.connected()) {
-     client.printf("ESP8266: %s",msg);
+     client.printf("DHT:%s",msg);
    }
    String line = client.readStringUntil('\n');
    Serial.println(line);
@@ -59,6 +63,13 @@ int connect2Raspberry(char*msg) {
 }
 
 void setup() {
+  Wire.begin(4,5);
+  Wire.beginTransmission(39);
+  LCD_CONFIG = Wire.endTransmission();
+  if (!LCD_CONFIG){
+    lcd.init();                      // initialize the lcd 
+    lcd.backlight();
+  }
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password); //Connect to wifi
@@ -82,11 +93,20 @@ void setup() {
   Serial.print("Connected to ");
   Serial.println(ssid);
   Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());  
+  Serial.println(WiFi.localIP()); 
+  
+  String IP = WiFi.localIP().toString();
+  char Buf[50];
+  IP.toCharArray(Buf, 50);
+  connect2Raspberry(Buf);
   server.begin();
   Serial.print(WiFi.localIP());
+  if (!LCD_CONFIG)
+    lcd.print(WiFi.localIP());
   Serial.print(" on port ");
   Serial.println(port);
+ 
+  
 
   // Init DHT
   dht.begin();
@@ -95,9 +115,10 @@ void loop() {
   char str[80];
   WiFiClient client = server.available();
   if (client) {
-    if(client.connected())  
+    if(client.connected()) {
       Serial.print(client.remoteIP());
       Serial.println("  Raspberry(Client) Connected to Server");
+    }
       
     while(client.connected()){      
       while(client.available()>0){
@@ -106,19 +127,23 @@ void loop() {
       } 
       
       if (strstr(Buffer,"DHT")){
+        
         bzero(Buffer,40);
-        float h,t;
-       // for (int i =0;i<4;i++){
-          h = dht.readHumidity(); 
-          t = dht.readTemperature();
-         // delay(500);
-       // }           
+        float h = dht.readHumidity(); 
+        float t = dht.readTemperature();
+        if (!LCD_CONFIG) {
+          lcd.setCursor(0,1);
+          lcd.print(t*9.0 / 5.0 + 32.0);
+          lcd.setCursor(0,2);
+          lcd.print(h);
+        }   
         sprintf(str, "%f,%f", t*9.0 / 5.0 + 32.0,h);
         Serial.println(str);
         client.print(str);  //Send Data to connected client
       } 
       if (strstr(Buffer,"CLR")){
         bzero(Buffer,40);
+        strcpy(str,"alarm cleared");
         digitalWrite(D5, LOW);
         client.print(str); 
       }

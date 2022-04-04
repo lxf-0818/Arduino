@@ -7,8 +7,6 @@
 //#define CELL
 #include <LiquidCrystal_I2C.h>
 LiquidCrystal_I2C lcd(0x27,20,4);
-
-//#include <Wire.h>
 #include <ESP8266WiFi.h>
 #include <Adafruit_ADS1X15.h>
 Adafruit_ADS1115 ads; 
@@ -92,7 +90,8 @@ void setup() {
   Serial.println(WiFi.localIP());  
   server.begin();
   Serial.print(WiFi.localIP());
-  lcd.print(WiFi.localIP());
+  if (!LCD_CONFIG)
+    lcd.print(WiFi.localIP());
   
   Serial.print(" on port ");
   Serial.println(port);
@@ -106,36 +105,33 @@ void loop() {
   char str[80];
   WiFiClient client = server.available();
   if (client) {
-    if(client.connected())  
+    if(client.connected()) { 
       Serial.print(client.remoteIP());
       Serial.println("  Raspberry(Client) Connected to Server");
-      
-    while(client.connected()){      
+    }
+    while(client.connected()){ 
       while(client.available()>0){
         // read data from the connected client
         Buffer[Index++] = client.read(); 
       } 
-      float volts0, volts1, volts2, volts3;
       if (strstr(Buffer,"ADC")){
         bzero(Buffer,40);
-        volts0= ads.computeVolts(ads.readADC_SingleEnded(0));
+        float volts0= ads.computeVolts(ads.readADC_SingleEnded(0));
         if (volts0 < LOW_VOLT_ALARM){
           //connect2Raspberry("LOW_VOLT_ALARM");
           Serial.println("LOW_VOLT_ALARM");
           digitalWrite(D5, HIGH);
-  
         }
-         
-        volts1 = ads.computeVolts(ads.readADC_SingleEnded(1));
-        volts2 = ads.computeVolts(ads.readADC_SingleEnded(2));
-        volts3 = ads.computeVolts(ads.readADC_SingleEnded(3));
+        float volts1 = ads.computeVolts(ads.readADC_SingleEnded(1));
+        float volts2 = ads.computeVolts(ads.readADC_SingleEnded(2));
+        float volts3 = ads.computeVolts(ads.readADC_SingleEnded(3));
       
         bzero(str,80); 
         sprintf(str,"%f,%f,%f,%f",volts0,volts1,volts2,volts3); 
         if (!LCD_CONFIG) {
           lcd.setCursor(0,1);
           lcd.print(volts0);
-        } 
+        }    
         Serial.println(str);    
         client.print(str);  
       } 
