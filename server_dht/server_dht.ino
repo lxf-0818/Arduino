@@ -103,6 +103,8 @@ void setup() {
   Serial.print(WiFi.localIP());
   if (!LCD_CONFIG)
     lcd.print(WiFi.localIP());
+    lcd.setCursor(0,1);
+    lcd.print(port);
   Serial.print(" on port ");
   Serial.println(port);
  
@@ -117,7 +119,7 @@ void loop() {
   if (client) {
     if(client.connected()) {
       Serial.print(client.remoteIP());
-      Serial.println("  Raspberry(Client) Connected to Server");
+      Serial.println("  Client(Rapsberry) Connected to Server");
     }
       
     while(client.connected()){      
@@ -127,14 +129,13 @@ void loop() {
       } 
       
       if (strstr(Buffer,"DHT")){
-        
         bzero(Buffer,40);
         float h = dht.readHumidity(); 
         float t = dht.readTemperature();
         if (!LCD_CONFIG) {
-          lcd.setCursor(0,1);
-          lcd.print(t*9.0 / 5.0 + 32.0);
           lcd.setCursor(0,2);
+          lcd.print(t*9.0 / 5.0 + 32.0);
+          lcd.setCursor(0,3);
           lcd.print(h);
         }   
         sprintf(str, "%f,%f", t*9.0 / 5.0 + 32.0,h);
