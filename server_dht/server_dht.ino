@@ -27,49 +27,24 @@ const char *password = "4458e951";
 #endif  
 int Index=0;
 char Buffer[40];
-byte LCD_CONFIG;
+byte LCD_CONFIG,MCP_CONFIG;
 //IPAddress local_IP(10,0,0,109);
 //IPAddress gateway(10,0,0,1);
 //IPAddress subnet(255,255,255,0);
 //IPAddress primaryDNS(75,75,75,75);
 //IPAddress secondaryDNS(75,75,75,76);
+#include "Adafruit_MCP9808.h"
+int connect2Raspberry(char*msg);
+ Adafruit_MCP9808 mcp;
 
 #include "DHT.h"
 #define DHTPIN 14
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE); // Initialize DHT sensor
 
-int connect2Raspberry(char*msg) {
-  
-    WiFiClient client;
-    if (!client.connect(host, 1233)) {
-      Serial.println("connection failed");
-      delay(5000);
-      return 0 ;
-    }
-    
-   // Serial.println("sending data to server");
-   // This will send a string to the server
-   if (client.connected()) {
-     client.printf("DHT:%s",msg);
-   }
-   String line = client.readStringUntil('\n');
-   Serial.println(line);
-
-   Serial.println("closing connection");
-   client.stop();
-   return 0;
-    
-}
 
 void setup() {
-  Wire.begin(4,5);
-  Wire.beginTransmission(39);
-  LCD_CONFIG = Wire.endTransmission();
-  if (!LCD_CONFIG){
-    lcd.init();                      // initialize the lcd 
-    lcd.backlight();
-  }
+  
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password); //Connect to wifi
@@ -78,9 +53,7 @@ void setup() {
 
   //used for debug
   //pinMode(LED_BUILTIN, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
-  //pinMode(D5, OUTPUT);
-  //digitalWrite(D5, LOW);
- 
+
   // Wait for connection  
   Serial.println("Connecting to Wifi");
   while (WiFi.status() != WL_CONNECTED){
@@ -95,26 +68,50 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP()); 
   
-  String IP = WiFi.localIP().toString();
-  char Buf[50];
-  IP.toCharArray(Buf, 50);
-  connect2Raspberry(Buf);
-  server.begin();
+ 
+  Wire.begin(4,5);
+  Wire.beginTransmission(0x27);
+  LCD_CONFIG = Wire.endTransmission();
+  if (!LCD_CONFIG){
+    lcd.init();                      // initialize the lcd 
+    lcd.backlight();
+  }
+   char Buf[50];
+  Wire.begin(4,5);
+  Wire.beginTransmission(0x18);
+  MCP_CONFIG = Wire.endTransmission();
+  if (!MCP_CONFIG){
+    strcpy(Buf,"DHT:");
+    Serial.println("MCP9808 found");
+    // Create the MCP temperature sensor object
+    mcp = Adafruit_MCP9808();
+    mcp.begin(0x18);
+  }
+  
+
   Serial.print(WiFi.localIP());
   if (!LCD_CONFIG)
     lcd.print(WiFi.localIP());
     lcd.setCursor(0,1);
     lcd.print(port);
+    
   Serial.print(" on port ");
   Serial.println(port);
- 
-  
 
+  String IP = WiFi.localIP().toString();
+  
+  IP.toCharArray(Buf+4, 50);
+  connect2Raspberry(Buf);
+  server.begin();
+  
+    
+ 
   // Init DHT
   dht.begin();
 }
 void loop() {
   char str[80];
+  float f=0.0;
   WiFiClient client = server.available();
   if (client) {
     if(client.connected()) {
@@ -122,11 +119,16 @@ void loop() {
       Serial.println("  Client(Rapsberry) Connected to Server");
     }
       
-    while(client.connected()){      
+    while(1){      
       while(client.available()>0){
         // read data from the connected client
         Buffer[Index++] = client.read(); 
       } 
+      if (!Index) {
+       // delay(500);
+        continue; // Wait till client sends command
+      }
+      Index=0;
       
       if (strstr(Buffer,"DHT")){
         bzero(Buffer,40);
@@ -137,21 +139,29 @@ void loop() {
           lcd.print(t*9.0 / 5.0 + 32.0);
           lcd.setCursor(0,3);
           lcd.print(h);
-        }   
-        sprintf(str, "%f,%f", t*9.0 / 5.0 + 32.0,h);
-        Serial.println(str);
-        client.print(str);  //Send Data to connected client
+        } 
+        if (!MCP_CONFIG){
+          mcp.wake();
+          f = mcp.readTempF();
+          Serial.print("Temp: "); 
+          Serial.print(f, 4); 
+          Serial.println("*F.");
+          mcp.shutdown();
+        }
+ 
+  
+    
+        sprintf(str, "%f,%f", t*9.0 / 5.0 + 32.0,f);
+        break;
       } 
-      if (strstr(Buffer,"CLR")){
-        bzero(Buffer,40);
-        strcpy(str,"alarm cleared");
-        digitalWrite(D5, LOW);
-        client.print(str); 
-      }
 
+      else 
+        strcpy(str,"Invalid cmd");
+        break;
     }
+    Serial.println(str);
+    client.print(str); 
     client.stop();
-    Index =0;
     Serial.println("Client disconnected from Server");    
   }
 }
