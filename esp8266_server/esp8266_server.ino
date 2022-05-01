@@ -108,19 +108,16 @@ void setup() {
   Wire.beginTransmission(0x18);
   MCP_CONFIG = Wire.endTransmission();
   if (!MCP_CONFIG){
-    strncpy(Buf,"DHT:",3);
+    strncpy(Buf,"DHT:",4);
     connect2Raspberry(Buf);
     Serial.println("MCP9808 found");
     // Create the MCP temperature sensor object
     mcp = Adafruit_MCP9808();
     mcp.begin(0x18);
     // Init DHT
-   dht.begin();
+    dht.begin();
   }
-  
-
  
-  
   server.begin();
   
   
@@ -144,18 +141,16 @@ void loop() {
         continue; // Wait till client sends command
       }
       Index =0;// reset length of command for next i/o
-      
       if (strstr(Buffer,"ADC")){
-        
+                
         //The voltage read from the battery is around 12v we need to use a voltage divivde to reduce voltage < 3.3V.
         int j=0;
         char *token = strtok(Buffer+4,"_"); //ptr pass the ADC token to get the actual offset 
         while (token !=NULL) {
-      //    Serial.println(token);
           voltageDivider[j++] = atof(token);
           token = strtok(NULL,"_");
         }
-        bzero(Buffer,40);
+        
         float volts0= adc.computeVolts(adc.readADC_SingleEnded(0));
         if (volts0*voltageDivider[0] < LOW_VOLT_ALARM){
           //connect2Raspberry("LOW_VOLT_ALARM");
@@ -179,6 +174,7 @@ void loop() {
           lcd.print(volts0*voltageDivider[0]);
         } 
         sprintf(str,"%f,%f,%f,%f,%f",volts0*voltageDivider[0],volts1,volts2,volts3,volt0Alarm); 
+        bzero(Buffer,40);
         break;
       }
  
