@@ -9,7 +9,7 @@ int connect2Raspberry(char*msg) {
   
    // This will send a string to the server
    if (client.connected()) {
-     Serial.printf("msg sent to Pi %s\n",msg);
+     Serial.printf("msg '%s' sent to Pi \n",msg);
      client.printf(msg);
    }
    String line = client.readStringUntil('\n');
