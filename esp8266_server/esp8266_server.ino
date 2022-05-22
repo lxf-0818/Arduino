@@ -117,17 +117,25 @@ void setup() {
   }
 
   //Following same logic as I2C if oneWire detects device DS0_CONFIG =0 else 1 
-   
-  oneWire.search(addr);  
-  if (addr[0] == 0x28) {
-    strncpy(Buf,"DS0:",4);
-    Serial.println("DS18B20 detected");
-    connect2Raspberry(Buf);
-    DS0_CONFIG =0;
-    oneWire.reset_search(); //
+  int deviceCount =0;
+  while (1){
+    if (!oneWire.search(addr)) {
+      if (deviceCount) { 
+        strncpy(Buf,"DS0:",4);
+        Serial.printf("DS18B20 detected cnt:%d\n",deviceCount);
+        connect2Raspberry(Buf);
+        oneWire.reset_search();
+        DS0_CONFIG =0;
+      }
+      else 
+        DS0_CONFIG =1;
+
+      break;
+    }
+    deviceCount++;
+    
   }
-  else 
-    DS0_CONFIG =1;
+ 
 
   if (DS0_CONFIG && MCP_CONFIG && ADC_CONFIG)
       connect2Raspberry("NO DEVICE FOUND");
@@ -156,6 +164,12 @@ void loop() {
         continue; // Wait till client sends command
       }
       Index =0;// reset length of command for next i/o
+      if (strstr(Buffer,"RST")){
+        client.stop();
+        Serial.println("Client disconnected from Server+rst");    
+        delay(1000);
+        ESP.restart();  
+      }
       if (strstr(Buffer,"ADC")){
         if (ADC_CONFIG){
           deviceNotEnabled = true;
