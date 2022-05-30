@@ -1,3 +1,5 @@
+
+
 /*
  * Create a TCP Server on ESP8266 NodeMCU. 
  * TCP Socket Server Send Receive
@@ -6,18 +8,22 @@
 #include <ESP8266WiFi.h>
 #include <Adafruit_ADS1X15.h>
 #include <Adafruit_MCP9808.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+
 #define _HOME
 //#define CELL
 #include <LiquidCrystal_I2C.h>
-
+#define LOW_VOLT_WARNING 12.7
+#define LOW_VOLT_ALARM 12.5
 LiquidCrystal_I2C lcd(0x27,20,4);
 #include <OneWire.h>
-//#include <DallasTemperature.h>
+#define SEALEVELPRESSURE_HPA (1013.25)
+
+Adafruit_BME280 bme; // I2C
 
 // GPIO where the DS18B20 is connected to
 const int oneWireBus = 0; 
-byte addr[8];    
-
 // Setup a oneWire instance to communicate with any OneWire devices
 OneWire oneWire(oneWireBus);
 
@@ -28,12 +34,7 @@ Adafruit_MCP9808 mcp;
 WiFiServer server(PORT);
 WiFiClient client;
 
-#define LOW_VOLT_WARNING 12.7
-#define LOW_VOLT_ALARM 12.5
-
-
-
-byte LCD_CONFIG,MCP_CONFIG,ADC_CONFIG,DS0_CONFIG;
+byte LCD_CONFIG,MCP_CONFIG,ADC_CONFIG,DS0_CONFIG,BME_CONFIG;
 //Server connect to WiFi Network
 #ifdef _HOME
 const char* host = "10.0.0.208";
@@ -49,7 +50,8 @@ int Index=0;
 char Buffer[40];
 int connect2Raspberry(char*msg);
 int readTemp(char * str);
-char Buf[50];
+char Buf[50] ={"NO DEVICE FOUND"};
+byte addr[8];   
 
 void setup() {
   Serial.begin(115200);
@@ -96,7 +98,6 @@ void setup() {
   if (!ADC_CONFIG){
     Serial.println("ADC detected ");
     strncpy(Buf,"ADC:",4);
-    connect2Raspberry(Buf);
     adc.setGain(GAIN_ONE);        // 1x gain   +/- 4.096V  1 bit = 2mV      0.125mV
     if (!adc.begin()) {
       Serial.println("Failed to initialize ADS.");
@@ -110,10 +111,21 @@ void setup() {
   if (!MCP_CONFIG){
     strncpy(Buf,"MCP:",4);
     Serial.println("MCP9808 detected");
-    connect2Raspberry(Buf);
     // Create the MCP temperature sensor object
     mcp = Adafruit_MCP9808();
     mcp.begin(0x18);
+  }
+  Wire.begin(4,5);
+  Wire.beginTransmission(0x77);
+  BME_CONFIG = Wire.endTransmission();
+  if (!BME_CONFIG){
+    Serial.println("BME280 detected ");
+    strncpy(Buf,"BME:",4);
+    if (!bme.begin(0x77, &Wire)) {
+      Serial.println("Could not find a valid BME280 sensor, check wiring!");
+    
+    }
+    
   }
 
   //Following same logic as I2C if oneWire detects device DS0_CONFIG =0 else 1 
@@ -123,7 +135,6 @@ void setup() {
       if (deviceCount) { 
         strncpy(Buf,"DS0:",4);
         Serial.printf("DS18B20 detected cnt:%d\n",deviceCount);
-        connect2Raspberry(Buf);
         oneWire.reset_search();
         DS0_CONFIG =0;
       }
@@ -136,9 +147,7 @@ void setup() {
     
   }
  
-
-  if (DS0_CONFIG && MCP_CONFIG && ADC_CONFIG)
-      connect2Raspberry("NO DEVICE FOUND");
+  connect2Raspberry(Buf);
     
 
   server.begin();
@@ -164,6 +173,7 @@ void loop() {
         continue; // Wait till client sends command
       }
       Index =0;// reset length of command for next i/o
+      
       if (strstr(Buffer,"RST")){
         client.stop();
         Serial.println("Client disconnected from Server+rst");    
@@ -235,6 +245,16 @@ void loop() {
      else if (strstr(Buffer,"DS0")){
         if(!DS0_CONFIG){
           readTemp(str);
+          break;
+         }
+         else {
+          deviceNotEnabled = true;
+          break;
+        }
+     }
+    else if (strstr(Buffer,"BME")){
+        if(!BME_CONFIG){
+          sprintf(str,"%f_%f_%f_%f",bme.readTemperature()*1.8+32,bme.readPressure() / 100.0F,bme.readAltitude(SEALEVELPRESSURE_HPA),bme.readHumidity());
           break;
          }
          else {

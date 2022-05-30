@@ -1,10 +1,10 @@
-/* 
-* i2c_port_address_scanner
-* Scans ports D0 to D7 on an ESP8266 and searches for I2C device. based on the original code
-* available on Arduino.cc and later improved by user Krodal and Nick Gammon (www.gammon.com.au/forum/?id=10896)
-* D8 throws exceptions thus it has been left out
-*
-*/
+////* 
+//* i2c_port_address_scanner
+//* Scans ports D0 to D7 on an ESP8266 and searches for I2C device. based on the original code
+//* available on Arduino.cc and later improved by user Krodal and Nick Gammon (www.gammon.com.au/forum/?id=10896)
+//* D8 throws exceptions thus it has been left out
+//*
+//*/
 
 #include <Wire.h>
 
