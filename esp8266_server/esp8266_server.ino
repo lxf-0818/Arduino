@@ -8,34 +8,12 @@
 #include <ESP8266WiFi.h>
 #include <Adafruit_ADS1X15.h>
 #include <Adafruit_MCP9808.h>
-#include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
+#include <LiquidCrystal_I2C.h>
+#include <OneWire.h>
 
 #define _HOME
 //#define CELL
-#include <LiquidCrystal_I2C.h>
-#define LOW_VOLT_WARNING 12.7
-#define LOW_VOLT_ALARM 12.5
-LiquidCrystal_I2C lcd(0x27,20,4);
-#include <OneWire.h>
-#define SEALEVELPRESSURE_HPA (1013.25)
-
-Adafruit_BME280 bme; // I2C
-
-// GPIO where the DS18B20 is connected to
-const int oneWireBus = 0; 
-// Setup a oneWire instance to communicate with any OneWire devices
-OneWire oneWire(oneWireBus);
-
-Adafruit_ADS1115 adc; 
-Adafruit_MCP9808 mcp;
-
-#define PORT 8888 
-WiFiServer server(PORT);
-WiFiClient client;
-
-byte LCD_CONFIG,MCP_CONFIG,ADC_CONFIG,DS0_CONFIG,BME_CONFIG;
-//Server connect to WiFi Network
 #ifdef _HOME
 const char* host = "10.0.0.208";
 const char *ssid = "NETGEAR37-2"; 
@@ -46,14 +24,36 @@ char *ssid = "Verizon-MiFi6620L-E497";
 const char *password = "4458e951";
 const char* host = "192.168.1.2";
 #endif  
+
+#define LOW_VOLT_WARNING 12.7
+#define LOW_VOLT_ALARM 12.5
+#define SEALEVELPRESSURE_HPA (1013.25)
+#define PORT 8888 
+
+LiquidCrystal_I2C lcd(0x27,20,4);
+Adafruit_BME280 bme; // I2C
+Adafruit_ADS1115 adc; 
+Adafruit_MCP9808 mcp;
+
+// GPIO where the DS18B20 is connected to
+const int oneWireBus = 0; 
+// Setup a oneWire instance to communicate with any OneWire devices
+OneWire oneWire(oneWireBus);
+//Server connect to WiFi Network
+WiFiServer server(PORT);
+WiFiClient client;
+
+byte LCD_CONFIG=1,MCP_CONFIG=1,ADC_CONFIG=1,DS0_CONFIG=1,BME_CONFIG=1;
 int Index=0;
 char Buffer[40];
+byte addr[8];  
 int connect2Raspberry(char*msg);
 int readTemp(char * str);
-char Buf[50] ={"NO DEVICE FOUND"};
-byte addr[8];   
+void readADC(char *str);
+ 
 
 void setup() {
+  char Buf[50];
   Serial.begin(115200);
   pinMode(D5, OUTPUT);
   digitalWrite(D5, LOW);  
@@ -74,13 +74,8 @@ void setup() {
   Serial.println(WiFi.localIP());  
   Serial.print("Port ");
   Serial.println(PORT);  // 
-  
-  // Save ESP8266 IP addr
-  String IP = WiFi.localIP().toString();
-  IP.toCharArray(Buf+4, 50-4);
-
-  //The following devices use I2C if found sets *_CONFIG =0 else set to 1
  
+  //The following devices use I2C if found sets *_CONFIG =0 else set to 1
   Wire.begin(4,5);
   Wire.beginTransmission(0x27);
   LCD_CONFIG = Wire.endTransmission();
@@ -123,9 +118,8 @@ void setup() {
     strncpy(Buf,"BME:",4);
     if (!bme.begin(0x77, &Wire)) {
       Serial.println("Could not find a valid BME280 sensor, check wiring!");
-    
-    }
-    
+      BME_CONFIG=1;
+   }
   }
 
   //Following same logic as I2C if oneWire detects device DS0_CONFIG =0 else 1 
@@ -146,17 +140,22 @@ void setup() {
     deviceCount++;
     
   }
- 
-  connect2Raspberry(Buf);
-    
+
+  if (DS0_CONFIG && MCP_CONFIG && ADC_CONFIG && BME_CONFIG)
+    Serial.println("no devices detected");
+  else {
+    String IP = WiFi.localIP().toString();
+    IP.toCharArray(Buf+4, 50-4);
+    connect2Raspberry(Buf);
+  }
 
   server.begin();
  
 }
 void loop() {
-  float volt0Alarm =0,volt1Alarm =0,volt2Alarm =0,volt3Alarm =0;
+  
   char str[80];
-  float voltageDivider[5];
+
   bool deviceNotEnabled =false;
   client = server.available();
   if (client) {
@@ -185,45 +184,9 @@ void loop() {
           deviceNotEnabled = true;
           break;
         }
-                
-        //The voltage read from the battery is around 12v we need to use a voltage divivde to reduce voltage < 3.3V.
-        int j=0;
-        char *token = strtok(Buffer+4,"_"); //ptr pass the ADC token to get the actual offset 
-        while (token !=NULL) {
-          voltageDivider[j++] = atof(token);
-          token = strtok(NULL,"_");
-        }
-        if (!voltageDivider[0]){
-          voltageDivider[0] = 5.68; 
-          Serial.println("bug stikes again");
-        }
-        
-        float volts0= adc.computeVolts(adc.readADC_SingleEnded(0));
-        if (volts0*voltageDivider[0] < LOW_VOLT_ALARM){
-          //connect2Raspberry("LOW_VOLT_ALARM");
-          Serial.println("LOW_VOLT_ALARM");
-          Serial.printf("v:%f mult:%f\n",volts0,voltageDivider[0]);  
-          digitalWrite(D5, HIGH);
-          volt0Alarm =1;
-        }
-        else 
-          volt0Alarm =0;
-           
-        float volts1 = adc.computeVolts(adc.readADC_SingleEnded(1));
-        float volts2 = adc.computeVolts(adc.readADC_SingleEnded(2));
-        float volts3 = adc.computeVolts(adc.readADC_SingleEnded(3));
-        bzero(str,80); 
-       
-        if (!LCD_CONFIG) {
-          lcd.setCursor(0,2);
-          lcd.print(volts0);
-          lcd.setCursor(0,3);
-          lcd.print(volts0*voltageDivider[0]);
-        } 
-        sprintf(str,"%f,%f,%f,%f,%f",volts0*voltageDivider[0],volts1,volts2,volts3,volt0Alarm); 
+        readADC(str);
         break;
       }
- 
       else if (strstr(Buffer,"CLR")){ 
         digitalWrite(D5, LOW);
         strcpy(str,"ALARM RESET");
@@ -270,7 +233,7 @@ void loop() {
     }
     if (deviceNotEnabled) {
        strcpy(str,"0");
-       Serial.printf("No devive found for %s on %s\n",Buffer,Buf+4);  
+     //  Serial.printf("No devive found for %s on %s\n",Buffer,Buf+4);  
     }
     Serial.println(str);
     client.print(str); 
