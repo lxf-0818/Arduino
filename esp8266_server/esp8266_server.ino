@@ -12,6 +12,11 @@
 #include <LiquidCrystal_I2C.h>
 #include <OneWire.h>
 
+#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+
+
 #define _HOME
 //#define CELL
 #ifdef _HOME
@@ -24,7 +29,6 @@ char *ssid = "Verizon-MiFi6620L-E497";
 const char *password = "4458e951";
 const char* host = "192.168.1.2";
 #endif  
-
 #define LOW_VOLT_WARNING 12.7
 #define LOW_VOLT_ALARM 12.5
 #define SEALEVELPRESSURE_HPA (1013.25)
@@ -140,6 +144,24 @@ void setup() {
     deviceCount++;
     
   }
+   ArduinoOTA.onStart([]() {
+    Serial.println("Start");
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.begin();
 
   if (DS0_CONFIG && MCP_CONFIG && ADC_CONFIG && BME_CONFIG)
     Serial.println("no devices detected");
@@ -155,6 +177,7 @@ void setup() {
 void loop() {
   
   char str[80];
+  ArduinoOTA.handle();
 
   bool deviceNotEnabled =false;
   client = server.available();
@@ -217,7 +240,7 @@ void loop() {
      }
     else if (strstr(Buffer,"BME")){
         if(!BME_CONFIG){
-          sprintf(str,"%f_%f_%f_%f",bme.readTemperature()*1.8+32,bme.readPressure() / 100.0F,bme.readAltitude(SEALEVELPRESSURE_HPA),bme.readHumidity());
+          sprintf(str,"%f,%f,%f,%f",bme.readTemperature()*1.8+32,bme.readPressure() / 100.0F,bme.readAltitude(SEALEVELPRESSURE_HPA),bme.readHumidity());
           break;
          }
          else {
