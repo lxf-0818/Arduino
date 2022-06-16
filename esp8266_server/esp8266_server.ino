@@ -12,10 +12,15 @@
 #include <LiquidCrystal_I2C.h>
 #include <OneWire.h>
 
-#include <ESP8266mDNS.h>
-#include <WiFiUdp.h>
+// OTA includes 
 #include <ArduinoOTA.h>
 
+//mysql includes
+#include <WiFiClient.h>
+#include <ESP8266HTTPClient.h>
+String apiKeyValue = "tPmAT5Ab3j7F9";
+String sensorName;
+//String sensorLocation;
 
 #define _HOME
 //#define CELL
@@ -23,12 +28,17 @@
 const char* host = "10.0.0.208";
 const char *ssid = "NETGEAR37-2"; 
 const char *password = "grandcurtain880";
+const char* serverName = "http://10.0.0.208/post-esp-data.php";
+String sensorLocation = "home";
 #endif
 #ifdef CELL
 char *ssid = "Verizon-MiFi6620L-E497"; 
 const char *password = "4458e951";
 const char* host = "192.168.1.2";
+const char* serverName = "http://192.168.1.2/post-esp-data.php";
+String sensorLocation = "RV";
 #endif  
+
 #define LOW_VOLT_WARNING 12.7
 #define LOW_VOLT_ALARM 12.5
 #define SEALEVELPRESSURE_HPA (1013.25)
@@ -45,7 +55,9 @@ const int oneWireBus = 0;
 OneWire oneWire(oneWireBus);
 //Server connect to WiFi Network
 WiFiServer server(PORT);
+WiFiClient client_sql;
 WiFiClient client;
+HTTPClient http;
 
 byte LCD_CONFIG=1,MCP_CONFIG=1,ADC_CONFIG=1,DS0_CONFIG=1,BME_CONFIG=1;
 int Index=0;
@@ -95,6 +107,7 @@ void setup() {
   Wire.beginTransmission(0x48);
   ADC_CONFIG = Wire.endTransmission();
   if (!ADC_CONFIG){
+    sensorName = "ADS1115";
     Serial.println("ADC detected ");
     strncpy(Buf,"ADC:",4);
     adc.setGain(GAIN_ONE);        // 1x gain   +/- 4.096V  1 bit = 2mV      0.125mV
@@ -118,6 +131,7 @@ void setup() {
   Wire.beginTransmission(0x77);
   BME_CONFIG = Wire.endTransmission();
   if (!BME_CONFIG){
+    sensorName = "BME280";
     Serial.println("BME280 detected ");
     strncpy(Buf,"BME:",4);
     if (!bme.begin(0x77, &Wire)) {
@@ -144,23 +158,7 @@ void setup() {
     deviceCount++;
     
   }
-   ArduinoOTA.onStart([]() {
-    Serial.println("Start");
-  });
-  ArduinoOTA.onEnd([]() {
-    Serial.println("\nEnd");
-  });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-    else if (error == OTA_END_ERROR) Serial.println("End Failed");
-  });
+
   ArduinoOTA.begin();
 
   if (DS0_CONFIG && MCP_CONFIG && ADC_CONFIG && BME_CONFIG)
@@ -178,7 +176,14 @@ void loop() {
   
   char str[80];
   ArduinoOTA.handle();
-
+ 
+    
+   // Your Domain name with URL path or IP address with path
+   http.begin(client_sql, serverName);
+  
+  // Specify content-type header
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  
   bool deviceNotEnabled =false;
   client = server.available();
   if (client) {
@@ -240,7 +245,31 @@ void loop() {
      }
     else if (strstr(Buffer,"BME")){
         if(!BME_CONFIG){
-          sprintf(str,"%f,%f,%f,%f",bme.readTemperature()*1.8+32,bme.readPressure() / 100.0F,bme.readAltitude(SEALEVELPRESSURE_HPA),bme.readHumidity());
+          sprintf(str,"%f,%f,%f,%f",bme.readTemperature()*1.8+32,bme.readPressure() / 100.0F,
+                  bme.readAltitude(SEALEVELPRESSURE_HPA),bme.readHumidity());
+          if (sensorLocation.equalsIgnoreCase("RV")) {
+            // Prepare your HTTP POST request data
+            String httpRequestData = "api_key=" + apiKeyValue + "&sensor=" + sensorName
+                          + "&location=" + sensorLocation + "&value1=" + String(bme.readTemperature())
+                          + "&value2=" + String(bme.readHumidity()) + "&value3=" + String(bme.readPressure()/100.0F) + "";
+   
+            Serial.print("httpRequestData: ");
+            Serial.println(httpRequestData);
+            // Send HTTP POST request
+            int httpResponseCode = http.POST(httpRequestData);
+            if (httpResponseCode>0) {
+              Serial.print("HTTP Response code: ");
+              Serial.println(httpResponseCode);
+            }
+            else {
+              Serial.print("Error code: ");
+              Serial.println(httpResponseCode);
+            }
+            // Free resources
+            http.end();         
+          }
+          
+         
           break;
          }
          else {
